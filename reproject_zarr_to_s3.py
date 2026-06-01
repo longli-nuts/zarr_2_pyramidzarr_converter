@@ -9,10 +9,14 @@ Required environment variables:
   AWS_ACCESS_KEY_ID
   AWS_SECRET_ACCESS_KEY
 
+SOURCE_URL and TARGET_URL may be full URLs or bare bucket/path values. Bare
+source paths are expanded with AWS_S3_ENDPOINT, which defaults to
+minio.dive.edito.eu, and bare target paths are expanded to s3://bucket/path.
+
 Optional environment variables:
   AWS_SESSION_TOKEN
-  AWS_S3_ENDPOINT
-  PYRAMID_LEVELS
+  AWS_S3_ENDPOINT (default: minio.dive.edito.eu)
+  LEVELS (default: 5)
   PYRAMID_PROJECTION
   PYRAMID_RESAMPLING
   PYRAMID_EXTRA_DIM
@@ -21,6 +25,7 @@ Optional environment variables:
 import os
 import sys
 import time
+from urllib.parse import urlparse
 
 
 SUCCESS_MARKER = "_SUCCESS"
@@ -40,7 +45,26 @@ def endpoint_url():
     return f"https://{endpoint}"
 
 
+def has_uri_scheme(value):
+    return bool(urlparse(value).scheme)
+
+
+def normalize_source_url(value):
+    value = value.strip()
+    if has_uri_scheme(value):
+        return value
+    return f"{endpoint_url().rstrip('/')}/{value.strip('/')}"
+
+
+def normalize_target_url(value):
+    value = value.strip()
+    if has_uri_scheme(value):
+        return value
+    return f"s3://{value.strip('/')}"
+
+
 def parse_s3_uri(uri):
+    uri = normalize_target_url(uri)
     if not uri.startswith("s3://"):
         raise ValueError(f"Expected s3:// target URI, got: {uri}")
 
@@ -136,9 +160,9 @@ def int_env(name, default):
 
 
 def main():
-    source_url = required_env("SOURCE_URL")
-    target_url = required_env("TARGET_URL")
-    levels = int_env("PYRAMID_LEVELS", 5)
+    source_url = normalize_source_url(required_env("SOURCE_URL"))
+    target_url = normalize_target_url(required_env("TARGET_URL"))
+    levels = int_env("LEVELS", 5)
     projection = os.environ.get("PYRAMID_PROJECTION", "equidistant-cylindrical")
     resampling = os.environ.get("PYRAMID_RESAMPLING", "nearest")
     extra_dim = os.environ.get("PYRAMID_EXTRA_DIM", "time")
