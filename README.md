@@ -22,6 +22,7 @@ Optional settings:
 
 ```bash
 -e AWS_S3_ENDPOINT="minio.dive.edito.eu"
+-e DELETE_WORKERS=16
 -e LEVELS=5
 -e PYRAMID_PROJECTION="equidistant-cylindrical"
 -e PYRAMID_RESAMPLING="nearest"
@@ -35,6 +36,8 @@ and target paths to `s3://bucket/path`. `AWS_S3_ENDPOINT` defaults to
 and `s3://...` target URLs are still accepted.
 
 Use `LEVELS` to set the number of pyramid levels.
+Use `DELETE_WORKERS` to control how many existing target objects are deleted in
+parallel before writing the new output.
 
 The container deletes any existing target `.zarr` prefix, writes the new Zarr v2
 pyramid, consolidates metadata, and adds a `_SUCCESS` marker.

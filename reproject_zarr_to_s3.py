@@ -16,6 +16,7 @@ minio.dive.edito.eu, and bare target paths are expanded to s3://bucket/path.
 Optional environment variables:
   AWS_SESSION_TOKEN
   AWS_S3_ENDPOINT (default: minio.dive.edito.eu)
+  DELETE_WORKERS (default: 16)
   LEVELS (default: 5)
   PYRAMID_PROJECTION
   PYRAMID_RESAMPLING
@@ -25,10 +26,12 @@ Optional environment variables:
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
 
 
 SUCCESS_MARKER = "_SUCCESS"
+DELETE_WORKERS = int(os.environ.get("DELETE_WORKERS", "16"))
 
 
 def required_env(name):
@@ -80,6 +83,7 @@ def parse_s3_uri(uri):
 
 def s3_client():
     import boto3
+    from botocore.config import Config
 
     return boto3.client(
         "s3",
@@ -87,6 +91,7 @@ def s3_client():
         aws_access_key_id=required_env("AWS_ACCESS_KEY_ID"),
         aws_secret_access_key=required_env("AWS_SECRET_ACCESS_KEY"),
         aws_session_token=os.environ.get("AWS_SESSION_TOKEN"),
+        config=Config(max_pool_connections=DELETE_WORKERS),
     )
 
 
@@ -117,14 +122,20 @@ def delete_existing_output(uri):
     if not keys:
         return
 
-    print(f"Deleting existing output: s3://{bucket}/{prefix}/ ({len(keys)} objects)")
-    for start in range(0, len(keys), 1000):
-        batch = keys[start:start + 1000]
-        client.delete_objects(
-            Bucket=bucket,
-            Delete={"Objects": [{"Key": key} for key in batch]},
-        )
-        print(f"  Deleted {min(start + len(batch), len(keys))}/{len(keys)}")
+    workers = min(DELETE_WORKERS, len(keys))
+    print(
+        f"Deleting existing output: s3://{bucket}/{prefix}/ "
+        f"({len(keys)} objects, {workers} workers)"
+    )
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [
+            executor.submit(client.delete_object, Bucket=bucket, Key=key)
+            for key in keys
+        ]
+        for index, future in enumerate(as_completed(futures), start=1):
+            future.result()
+            if index % 100 == 0 or index == len(keys):
+                print(f"  Deleted {index}/{len(keys)}")
 
 
 def add_success_marker(uri):
