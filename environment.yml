@@ -7,11 +7,11 @@ dependencies:
   - boto3
   - dask
   - fsspec
-  - numpy=1.23.*
+  - ndpyramid
   - rasterio
+  - requests
   - rioxarray
   - s3fs
-  - xarray>=2023.1,<2024.0
+  - xarray
   - zarr<3
-  - pip:
-      - ndpyramid
+  - aiohttp
